@@ -20,11 +20,15 @@
 
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from os.path import expanduser, join, exists
+import argparse
 import base64
 import requests
+import fnmatch
 import json
 import sys
+import logging
 
+log = logging.getLogger(__name__)
 
 PORT = None
 USER = None
@@ -52,8 +56,8 @@ DEFAULT_CONFIG = """
 
     "users": [
         {
-            "name": "name1",
-            "password": "pass1",
+            "name": "username",
+            "password": "secret-password",
             "methods_allowed": ["*"]
         }
     ]
@@ -129,6 +133,18 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
+        try:
+            return self._do_POST()
+        except Exception as e:
+            log.exception(e)
+            self.send_response(500)
+            self.send_header('Content-Type', 'text/html')
+            self.end_headers()
+            self.wfile.write(b'Internal server error')
+            return
+
+
+    def _do_POST(self):
         ''' Present frontpage with user authentication. '''
         header = self.headers.get('Authorization')
 
@@ -149,8 +165,27 @@ class Handler(BaseHTTPRequestHandler):
                 length = int(self.headers['Content-Length'])
                 request = self.rfile.read(length).decode('utf-8')
 
-                # TODO: filter by method
+                # filter allowed methods
                 payload = json.loads(request)
+                method = payload['method']
+
+                allowed = False
+                for pattern in user.get('methods_allowed', []):
+                    if fnmatch.fnmatch(method, pattern):
+                        allowed = True
+                        break
+                for pattern in user.get('methods_forbidden', []):
+                    if fnmatch.fnmatch(method, pattern):
+                        allowed = False
+                        break
+
+                if not allowed:
+                    self.send_response(403)
+                    self.send_header('Content-Type', 'text/html')
+                    self.end_headers()
+                    msg = 'Forbidden: user "%s" is not authorized to call method "%s"' % (user['name'], method)
+                    self.wfile.write(msg.encode('utf-8'))
+                    return
 
                 # forward rpc call to client
                 try:
@@ -161,9 +196,15 @@ class Handler(BaseHTTPRequestHandler):
 
                 except UnauthorizedError:
                     self.do_AUTHHEAD()
-                    self.wfile.write(b'Unauthorized connection from proxy to client')
+                    self.wfile.write(b'Unauthorized connection from proxy to BitShares client')
                     return
 
+                except requests.exceptions.ConnectionError:
+                    self.send_response(504)
+                    self.send_header('Content-Type', 'text/html')
+                    self.end_headers()
+                    self.wfile.write(b'Could not connect to BitShares client')
+                    return
 
         # wrong authentication (no corresponding user/password)
         self.do_AUTHHEAD()
@@ -171,8 +212,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 
-def main():
-    load_config()
+def main(args):
+    load_config(data_dir=args.data_dir)
 
     print('Starting proxy server on port: %d' % CONFIG['port'])
     httpd = HTTPServer(('', CONFIG['port']), Handler)
@@ -180,4 +221,10 @@ def main():
     httpd.serve_forever()
 
 if __name__ == '__main__':
-    main()
+
+    parser = argparse.ArgumentParser(description='Run a filtering proxy for the BitShares client.')
+    parser.add_argument('data_dir', metavar='data_dir', type=str, nargs='?',
+                       help='the data dir of the BitShares client')
+
+    args = parser.parse_args()
+    main(args)
