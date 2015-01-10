@@ -64,7 +64,7 @@ to use a different port than the one on which the BitShares client is listening!
 * ``methods_allowed``: the list of methods allowed. You can used shell-like
   pattern matching here (eg: ``"wallet_*"`` will allow all methods starting
   with ``"wallet_"``)
-* ``methods_forbidden``: the list of forbidden methods. You can also use
+* ``methods_forbidden`` *(optional)*: the list of forbidden methods. You can also use
   shell-like pattern matching here.
 
 Note that by default, methods are forbidden, so the proxy will allow you to

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 #
 # bts_proxy - Proxy providing RPC access control to the BitShares client
-# Copyright (c) 2014 Nicolas Wack <wackou@gmail.com>
+# Copyright (c) 2015 Nicolas Wack <wackou@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -212,19 +212,16 @@ class Handler(BaseHTTPRequestHandler):
 
 
 
-def main(args):
+def main():
+    parser = argparse.ArgumentParser(description='Run a filtering proxy for the BitShares client.')
+    parser.add_argument('data_dir', metavar='data_dir', type=str, nargs='?',
+                       help='the data dir of the BitShares client')
+
+    args = parser.parse_args()
+
     load_config(data_dir=args.data_dir)
 
     print('Starting proxy server on port: %d' % CONFIG['port'])
     httpd = HTTPServer(('', CONFIG['port']), Handler)
 
     httpd.serve_forever()
-
-if __name__ == '__main__':
-
-    parser = argparse.ArgumentParser(description='Run a filtering proxy for the BitShares client.')
-    parser.add_argument('data_dir', metavar='data_dir', type=str, nargs='?',
-                       help='the data dir of the BitShares client')
-
-    args = parser.parse_args()
-    main(args)
